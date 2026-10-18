@@ -22,6 +22,8 @@ canvas{display:block}
 #msg .l2{font-size:16px;opacity:0;animation:fi 1.2s 2.2s forwards}
 #msg a{color:#7fd1ff}
 #colorpick{display:flex;align-items:center;justify-content:center;gap:10px;font-size:15px;opacity:0;animation:fi 1s 2.2s forwards}#playerColor{width:48px;height:38px;padding:2px;border:2px solid #ffd34d;border-radius:9px;background:#111c;cursor:pointer}
+#dailyHUD{position:fixed;left:8px;top:calc(env(safe-area-inset-top,0px) + 42px);max-width:min(360px,82vw);padding:7px 10px;border:1px solid #ffd34d;border-radius:9px;background:#10151ddd;color:#fff;font:bold 12px/1.4 sans-serif;text-shadow:0 1px 2px #000;pointer-events:none;z-index:11}
+body:not(.playing) #dailyHUD{display:none}
 #play{opacity:0;animation:fi 1s 4s forwards;margin-top:18px;padding:14px 46px;font-size:20px;font-weight:bold;border:0;border-radius:30px;background:#fff;color:#111;cursor:pointer}
 @keyframes fi{to{opacity:1}}
 .vrbtn{margin-top:12px;padding:12px 40px;font-size:18px;font-weight:bold;border:2px solid #fff;border-radius:30px;background:transparent;color:#fff;cursor:pointer}
@@ -61,7 +63,7 @@ body:not(.playing) #hp{display:none}
 body:not(.playing) #coins{display:none}
 body:not(.playing) #hud,body:not(.playing) #stick,body:not(.playing) .b,body:not(.playing) #cross{display:none!important}
 </style></head><body>
-<div id="msg">Loading lobby...</div><div id="hud"></div><div id="cross"></div>
+<div id="msg">Loading lobby...</div><div id="hud"></div><div id="dailyHUD"></div><div id="cross"></div>
 <div id="credit">Model: "animal company - Lobby 1.94.0" by Romeo rios vr (sketchfab.com/rrios2027), CC-BY 4.0</div>
 <div id="stick"><div id="knob"></div></div>
 <div id="fade"></div><div id="chatlog"></div><input id="chatin" maxlength="120" placeholder="Type a message, Enter = send" autocomplete="off"><div class="b" id="chatbtn">CHAT</div><div id="coins"></div><div id="toast"></div><div id="shop"><h2>Stump Shop</h2><div id="shoplist"></div><button id="hatbtn">Hats &#9662;</button><div id="hatbox"><input id="hatq" placeholder="Search hats" autocomplete="off"><div id="hatlist"></div></div><button id="shopclose">Close</button></div><div id="hp"><div id="hpf"></div><span id="hpt">100</span></div><div id="bagc"></div><div class="b" id="bag">BAG</div><button id="logbtn">Updates</button><div id="log"><div id="logbox"></div></div><div id="hurt"></div><div class="b" id="drop">DROP</div><div class="b" id="jump">JUMP</div><div class="b" id="spawn">SPAWN</div>
@@ -194,7 +196,7 @@ async function init(){
   function useMap(M){curMap=M;T=M.T;grid=M.grid;gx0=M.gx0;gz0=M.gz0;minY=M.minY;spawns=M.spawns;spi=0;
     for(const k in maps)maps[k].group.visible=(maps[k]===M);
     const m2=M.name==='m2';const col=m2?0x000000:0x87b8e0;scene.background=new THREE.Color(col);scene.fog=m2?new THREE.Fog(col,2,34):new THREE.Fog(col,120,800);
-    document.getElementById('credit').textContent=M.credit; if(mapHook)mapHook(M);}
+    document.getElementById('credit').textContent=M.credit; if(mapHook)mapHook(M); if(window.__dailyVisit)window.__dailyVisit(M.name);}
   maps.m1=await loadMap(DATA,'m1','Model: "animal company - Lobby 1.94.0" by Romeo rios vr (sketchfab.com/rrios2027), CC-BY 4.0');
   useMap(maps.m1);
   function goSpawn(){const s=spawns[spi%spawns.length];spi++;player.x=s.x;player.y=s.y+0.05;player.z=s.z;player.vy=0;if(s.yaw!==undefined){player.yaw=s.yaw;player.pitch=s.pitch||0;}hud.textContent='Spawn '+((spi-1)%spawns.length+1)+'/'+spawns.length+(isTouch?' · SPAWN = next spot · tap items to grab':' · T = next spot · click items to grab · G drop · L flashlight · Enter = chat');}
@@ -284,6 +286,18 @@ async function init(){
   const raycaster=new THREE.Raycaster(), items=[]; raycaster.camera=camera; const handItem=[null,null]; let lastHand=0, coins=100, shopOpen=false; let hasBag=false; try{hasBag=localStorage.getItem('hasBag')==='1';}catch(e){} const bagList=[], BAG_MAX=4; try{const c0=parseInt(localStorage.getItem('coins'),10); if(isFinite(c0)&&c0>=0)coins=Math.min(c0,99999999);}catch(e){}
   const coinsEl=document.getElementById('coins'), shopEl=document.getElementById('shop'), toastEl=document.getElementById('toast');
   let online=1; const updCoins=()=>{coinsEl.textContent='Coins: '+coins+(online>1?' · Online: '+online:''); try{localStorage.setItem('coins',String(coins));}catch(e){}}; updCoins(); const addCoins=n=>{coins+=n;updCoins();};
+  const dailyHUD=document.getElementById('dailyHUD'),DAILY_GOAL=75,DAILY_REWARD=30;
+  const dailyDate=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+  let dailyQuest={date:dailyDate(),sales:0,forest:false,escape:false,claimed:{}};
+  try{const q=JSON.parse(localStorage.getItem('dailyQuest')||'null');if(q&&q.date===dailyDate())dailyQuest={date:q.date,sales:Math.max(0,Number(q.sales)||0),forest:!!q.forest,escape:!!q.escape,claimed:q.claimed&&typeof q.claimed==='object'?q.claimed:{}};}catch(e){}
+  function saveDaily(){try{localStorage.setItem('dailyQuest',JSON.stringify(dailyQuest));}catch(e){}}
+  function dailyStatus(){return 'Daily: Sell '+Math.min(DAILY_GOAL,dailyQuest.sales)+'/'+DAILY_GOAL+' coins · Forest '+(dailyQuest.forest?'✓':'—')+' · Escape '+(dailyQuest.escape?'✓':'—');}
+  function drawDaily(){if(dailyHUD)dailyHUD.textContent='DAILY QUESTS  ·  Sell '+Math.min(DAILY_GOAL,dailyQuest.sales)+'/'+DAILY_GOAL+' coins  ·  Forest '+(dailyQuest.forest?'✓':'○')+'  ·  Escape '+(dailyQuest.escape?'✓':'○');}
+  function claimDaily(id){if(dailyQuest.claimed[id])return;dailyQuest.claimed[id]=1;saveDaily();addCoins(DAILY_REWARD);toast('Daily quest complete! +'+DAILY_REWARD+' coins');drawDaily();}
+  function dailySale(value){dailyQuest.sales+=Math.max(0,value|0);saveDaily();if(dailyQuest.sales>=DAILY_GOAL)claimDaily('sale');drawDaily();}
+  window.__dailyVisit=name=>{if(name==='m3'&&!dailyQuest.forest){dailyQuest.forest=true;saveDaily();claimDaily('forest');drawDaily();}};
+  function dailyEscape(){if(!dailyQuest.escape){dailyQuest.escape=true;saveDaily();claimDaily('escape');drawDaily();}}
+  drawDaily();
   const vrLines=[]; let vrToastText='',vrToastT=0,vrHintUntil=0; let toastT=0; function toast(t){vrToastText=t;vrToastT=Date.now();toastEl.textContent=t;toastEl.style.opacity=1;clearTimeout(toastT);toastT=setTimeout(()=>toastEl.style.opacity=0,1800);}
   const PM=(c,e)=>new THREE.MeshPhongMaterial({color:c,shininess:0,emissive:e||0x000000});
   const ITEMS={ // prices / sell values / damage (the server holds the authoritative copies)
@@ -896,7 +910,7 @@ async function init(){
   let LBTOP=[]; const LS=(k,d)=>{ try{ const v=localStorage.getItem(k); return v===null?d:v; }catch(e){ return d; } }, LSset=(k,v)=>{ try{ localStorage.setItem(k,String(v)); }catch(e){} };
   function mimicKillRewards(){ const n=(parseInt(LS('mimicKills','0'),10)||0)+1; LSset('mimicKills',n); const first=!!(window.HATAPI&&window.HATAPI.grant&&window.HATAPI.grant('mimic_mask'));
     setTimeout(()=>toast(first?'You earned the MIMIC MASK - find it in Hats':'Mimic kills: '+n+'  (type /top for the Hall of Fame)'),1800); }
-  function countEscape(){ LSset('mimicEscapes',(parseInt(LS('mimicEscapes','0'),10)||0)+1); }
+  function countEscape(){ LSset('mimicEscapes',(parseInt(LS('mimicEscapes','0'),10)||0)+1); dailyEscape(); }
   function showTop(){ addChat('Hall of Fame','Mimic kills - top players:',false,''); if(!LBTOP.length)addChat('Hall of Fame','nobody has beaten the Mimic yet',false,''); LBTOP.forEach((r,i)=>addChat('#'+(i+1),String(r[0]).slice(0,16)+'  -  '+r[1],false,''));
     addChat('You','kills '+(LS('mimicKills','0'))+'  /  escapes '+(LS('mimicEscapes','0')),false,''); }
   // --- lights-out events in the Backrooms (same clock for everybody) ---
@@ -1296,7 +1310,7 @@ async function init(){
             if(m.id===myId){ setMyHp(m.hp); hurtFlash(); toast('Hit! '+Math.round(m.hp)+' HP left'); const a=avatars.get(m.by)||monPosObj(m.by); if(a){ const dx=player.x-a.position.x,dz=player.z-a.position.z,l=Math.hypot(dx,dz)||1; applyKnock(dx/l,dz/l); } }
             else { const av=avatars.get(m.id); if(av)av.userData.hp=m.hp; if(m.by===myId)toast('Hit!'); } }
           else if(m.t==='ko'){ if(m.id===myId){ if(String(m.by)==='Mm2')jumpscare(); onKO(); } else { const av=avatars.get(m.id); if(String(m.by)==='Mm2')decapStart(av); if(av)av.userData.hp=100; if(m.by===myId){ addCoins(10); toast('Knockout! +10 coins'); } } }
-          else if(m.t==='sold'&&typeof m.coins==='number'){ addCoins(m.coins|0); toast('Sold '+((ITEMS[m.type]||{}).name||'item')+' +'+(m.coins|0)+' coins'); }
+          else if(m.t==='sold'&&typeof m.coins==='number'){ addCoins(m.coins|0); dailySale(m.coins|0); toast('Sold '+((ITEMS[m.type]||{}).name||'item')+' +'+(m.coins|0)+' coins'); }
           else if(m.t==='seeded'&&typeof m.m==='string')lootSeeded.add(m.m);
           else if(['mp','mown','mhp','mdead','mresp','mkill','msay','mx','lb','sigmaok','prank','prankauth'].includes(m.t))monNet(m);
           else if(m.t==='rtc')rtcNet(m);
@@ -1474,7 +1488,7 @@ async function init(){
     const m=new THREE.Mesh(new THREE.PlaneGeometry(0.23,0.16),new THREE.MeshBasicMaterial({map:tex,transparent:true,side:THREE.DoubleSide,fog:false}));
     m.rotation.x=-Math.PI/2; m.position.set(0,0.16,0.12); m.renderOrder=996; m.userData={cv,tex,last:''}; return m; })();
   const vrChatPanel=(function(){const cv=document.createElement('canvas');cv.width=384;cv.height=288;const tex=new THREE.CanvasTexture(cv);const m=new THREE.Mesh(new THREE.PlaneGeometry(0.31,0.23),new THREE.MeshBasicMaterial({map:tex,transparent:true,side:THREE.DoubleSide,fog:false}));m.rotation.x=-Math.PI/2;m.position.set(-0.34,0.16,0.12);m.renderOrder=996;m.userData={cv,tex,last:''};return m;})();
-  function drawVRChat(){const u=vrChatPanel.userData,g=u.cv.getContext('2d'),lines=vrLines.slice(-7),key=lines.join('~');if(key===u.last)return;u.last=key;g.clearRect(0,0,384,288);g.fillStyle='rgba(8,12,18,.9)';g.fillRect(0,0,384,288);g.strokeStyle='#ffd34d';g.lineWidth=5;g.strokeRect(3,3,378,282);g.fillStyle='#ffd34d';g.font='bold 27px sans-serif';g.textAlign='left';g.fillText('CHAT',16,34);g.font='23px sans-serif';let y=68;for(const line of lines){const words=line.split(' ');let row='';for(const word of words){const next=row?row+' '+word:word;if(g.measureText(next).width>346&&row){g.fillStyle='#fff';g.fillText(row,16,y,346);y+=27;row=word;}else row=next;}if(row&&y<276){g.fillStyle='#fff';g.fillText(row,16,y,346);y+=29;}}u.tex.needsUpdate=true;}
+  function drawVRChat(){const u=vrChatPanel.userData,g=u.cv.getContext('2d'),lines=vrLines.slice(-7),key=lines.join('~')+'|'+dailyStatus();if(key===u.last)return;u.last=key;g.clearRect(0,0,384,288);g.fillStyle='rgba(8,12,18,.9)';g.fillRect(0,0,384,288);g.strokeStyle='#ffd34d';g.lineWidth=5;g.strokeRect(3,3,378,282);g.fillStyle='#ffd34d';g.font='bold 27px sans-serif';g.textAlign='left';g.fillText('CHAT',16,34);g.font='23px sans-serif';let y=68;for(const line of lines){const words=line.split(' ');let row='';for(const word of words){const next=row?row+' '+word:word;if(g.measureText(next).width>346&&row){g.fillStyle='#fff';g.fillText(row,16,y,346);y+=27;row=word;}else row=next;}if(row&&y<236){g.fillStyle='#fff';g.fillText(row,16,y,346);y+=29;}}g.fillStyle='#9be39b';g.font='bold 15px sans-serif';g.fillText(dailyStatus(),14,266,354);u.tex.needsUpdate=true;}
   function drawWrist(){ const u=wrist.userData, g=u.cv.getContext('2d'); const hint=Date.now()<vrHintUntil; const lines=vrLines.slice(-3); const tt=(Date.now()-vrToastT<2500)?vrToastText:'';
     const key=coins+'|'+online+'|'+myHp+'|'+(hasBag?bagList.length:-1)+'|'+(hint?'H':lines.join('~'))+'|'+tt+'|'+handItem.map(x=>x?x.userData.type:'-').join(); if(key===u.last)return; u.last=key;
     g.fillStyle='rgba(0,0,0,.75)'; g.fillRect(0,0,256,176); g.textAlign='left';
